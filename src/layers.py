@@ -14,6 +14,7 @@ class GCNLPAConv(nn.Module):
 
     def __init__(self, in_features, out_features, adj, bias=True):
         super(GCNLPAConv, self).__init__()
+        self.adj = adj
         self.in_features = in_features
         self.out_features = out_features
         self.weight = Parameter(torch.FloatTensor(in_features, out_features))
@@ -22,7 +23,7 @@ class GCNLPAConv(nn.Module):
         else:
             self.register_parameter('bias', None)
         self.reset_parameters()
-        self.adjacency_mask = Parameter(adj.clone()).to_dense()
+        self.adjacency_mask = Parameter(adj.clone())
 
     def reset_parameters(self):
         stdv = 1. / math.sqrt(self.weight.size(1))
@@ -30,20 +31,22 @@ class GCNLPAConv(nn.Module):
         if self.bias is not None:
             self.bias.data.uniform_(-stdv, stdv)
 
-    def forward(self, x, adj, y):
-        adj = adj.to_dense()
+    def forward(self, x, y):
+        # adj = adj.to_dense()
         # W * x
         support = torch.mm(x, self.weight)
         # Hadamard Product: A' = Hadamard(A, M)
-        adj = adj * self.adjacency_mask
+        adj = self.adj * self.adjacency_mask
         # Row-Normalize: D^-1 * (A')
         adj = F.normalize(adj, p=1, dim=1)
+        torch.
+        # adj = F.softmax(adj, dim=1)
 
         # output = D^-1 * A' * X * W
         output = torch.mm(adj, support)
         # y' = D^-1 * A' * y
         y_hat = torch.mm(adj, y)
-
+        torch.
         if self.bias is not None:
             return output + self.bias, y_hat
         else:

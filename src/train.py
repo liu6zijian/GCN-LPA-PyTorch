@@ -19,17 +19,17 @@ parser.add_argument('--no-cuda', action='store_true', default=False,
 parser.add_argument('--fastmode', action='store_true', default=False,
                     help='Validate during training pass.')
 parser.add_argument('--seed', type=int, default=42, help='Random seed.')
-parser.add_argument('--epochs', type=int, default=300,
+parser.add_argument('--epochs', type=int, default=200,
                     help='Number of epochs to train.')
-parser.add_argument('--lr', type=float, default=0.01,
+parser.add_argument('--lr', type=float, default=0.05,
                     help='Initial learning rate.')
-parser.add_argument('--weight_decay', type=float, default=5e-4,
+parser.add_argument('--weight_decay', type=float, default=1e-4,
                     help='Weight decay (L2 loss on parameters).')
-parser.add_argument('--hidden', type=int, default=16,
+parser.add_argument('--hidden', type=int, default=32,
                     help='Number of hidden units.')
-parser.add_argument('--dropout', type=float, default=0.5,
+parser.add_argument('--dropout', type=float, default=0.2,
                     help='Dropout rate (1 - keep probability).')
-parser.add_argument('--Lambda', type=float, default=1,
+parser.add_argument('--Lambda', type=float, default=10,
                     help='Please refer to Eqn. (18) in original paper')
 
 
@@ -40,10 +40,18 @@ np.random.seed(args.seed)
 torch.manual_seed(args.seed)
 if args.cuda:
     torch.cuda.manual_seed(args.seed)
-device = torch.device('cuda:2')
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 # Load data
 adj, features, labels, idx_train, idx_val, idx_test = load_data()
-adj = adj.to(device)
+
+features = features.to(device)
+adj = adj.to_dense().to(device)
+labels = labels.to(device)
+idx_train = idx_train.to(device)
+idx_val = idx_val.to(device)
+idx_test = idx_test.to(device)
+labels_for_lpa = one_hot_embedding(labels, labels.max().item() + 1).type(torch.FloatTensor).to(device)
+
 # Model and optimizer
 model = GCNLPA(nfeat=features.shape[1],
             nhid=args.hidden,
@@ -55,13 +63,7 @@ optimizer = optim.Adam(model.parameters(),
 
 if args.cuda:
     model.to(device)
-    features = features.to(device)
-    adj = adj.to(device)
-    labels = labels.to(device)
-    idx_train = idx_train.to(device)
-    idx_val = idx_val.to(device)
-    idx_test = idx_test.to(device)
-    labels_for_lpa = one_hot_embedding(labels, labels.max().item() + 1).type(torch.FloatTensor).to(device)
+    
 
 
 
@@ -69,19 +71,21 @@ def train(epoch):
     t = time.time()
     model.train()
     optimizer.zero_grad()
-    output, y_hat = model(features, adj, labels_for_lpa)
+    output, y_hat = model(features, labels_for_lpa)
     loss_gcn = F.nll_loss(output[idx_train], labels[idx_train])
     loss_lpa = F.nll_loss(y_hat, labels)
     acc_train = accuracy(output[idx_train], labels[idx_train])
     loss_train = loss_gcn + args.Lambda * loss_lpa
-    loss_train.backward(retain_graph=True)
+    # loss_train = F.nll_loss(output[idx_train], labels[idx_train]) + \
+    #     args.Lambda * F.nll_loss(y_hat, labels)
+    loss_train.backward(retain_graph=True) # 
     optimizer.step()
 
     if not args.fastmode:
         # Evaluate validation set performance separately,
         # deactivates dropout during validation run.
         model.eval()
-        output, _ = model(features, adj, labels_for_lpa)
+        output, _ = model(features, labels_for_lpa)
 
     loss_val = F.nll_loss(output[idx_val], labels[idx_val])
     acc_val = accuracy(output[idx_val], labels[idx_val])
@@ -95,7 +99,7 @@ def train(epoch):
 
 def test():
     model.eval()
-    output, _ = model(features, adj, labels_for_lpa)
+    output, _ = model(features, labels_for_lpa)
     loss_test = F.nll_loss(output[idx_test], labels[idx_test])
     acc_test = accuracy(output[idx_test], labels[idx_test])
     print("Test set results:",

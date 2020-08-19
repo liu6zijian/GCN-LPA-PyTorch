@@ -10,9 +10,9 @@ class GCNLPA(nn.Module):
         self.gc2 = GCNLPAConv(nhid, nclass, adj)
         self.dropout = dropout_rate
 
-    def forward(self, x, adj, y):
-        x, y_hat = self.gc1(x, adj, y)
+    def forward(self, x, y):
+        x, y_hat = self.gc1(x, y)
         x = F.relu(x)
         x = F.dropout(x, self.dropout, training=self.training)
-        x, y_hat = self.gc2(x, adj, y_hat)
+        x, y_hat = self.gc2(x, y_hat)
         return F.log_softmax(x, dim=1), F.log_softmax(y_hat,dim=1)
